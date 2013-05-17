@@ -42,7 +42,7 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
 {
 
   // Find the 2-D similarity transform that best aligns the two images (uniform scale, rotation and translation)
-  const float EPS = 1e-8; // Threshold value for termination criteria.
+  const float EPS = 1e-4; // Threshold value for termination criteria.
   const float HUBER_LOSS = 0.60;
   cv::Mat debug;
   
@@ -192,11 +192,9 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
     
     b = Eigen::Vector4f(b0,b1,b2,b3);
 
-    // std::cout << "b:" << std::endl;
-    // std::cout << b << std::endl;
-    // // Find parameter increment. 
     
-    H.ldlt().solve(b);
+    delta_p = H.ldlt().solve(b);
+
     Eigen::Matrix2f skew;
     skew << 0.0, -1.0, 
             1.0,  0.0;
