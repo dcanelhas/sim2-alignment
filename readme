@@ -1,0 +1,22 @@
+#(c) Daniel Ricão Canelhas
+#BSD licensed, see src/align.cpp for details.
+
+READ ME:
+
+Dependencies:
+
+This program depends on Eigen, OpenCV and cmake (and optionally OpenMP).
+
+Compilation instructions:
+
+$ mkdir build && cd build
+$ cmake ..
+$ make
+
+Running the program:
+
+from the main directory:
+
+./bin/align lenaT.png lena.png
+
+
