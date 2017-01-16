@@ -1,4 +1,33 @@
-#include "Eigen/Core"
+/*
+Copyright 2013 Daniel Ricão Canelhas
+
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, 
+this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, 
+this list of conditions and the following disclaimer in the documentation and/or 
+other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors 
+may be used to endorse or promote products derived from this software without 
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/
+
+#include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <iostream>
@@ -10,6 +39,10 @@
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+
+#define EPS 1e-4 // Threshold value on the change in parameters as a termination criteria.
+#define HUBER_LOSS 0.80 //Huber loss function parameter, to redunce the influence of outliers 
+#define PAUSE_BETWEEN true //should we pause between each image pyramid?
 
 template <class T>
 T Interpolate(cv::Mat &image, float y,float x)
@@ -42,8 +75,6 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
 {
 
   // Find the 2-D similarity transform that best aligns the two images (uniform scale, rotation and translation)
-  const float EPS = 1e-4; // Threshold value for termination criteria.
-  const float HUBER_LOSS = 0.60;
   cv::Mat debug;
   
   cv::Mat source_gradient_row;    // Gradient of I in X direction.
@@ -109,11 +140,17 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
     }
   }
 
+
+//This is the "inverse compositional" method, this means the 
+// Hessian approximation need only be computed
+//once, and remains constant for all iterations.
+  
+  float alpha = 1e-4;
   H <<
-  h00,h01,h02,h03,
-  h10,h11,h12,h13,
-  h20,h21,h22,h23,
-  h30,h31,h32,h33;
+  h00+alpha ,h01      ,h02      ,h03,
+  h10       ,h11+alpha,h12      ,h13,
+  h20       ,h21      ,h22+alpha,h23,
+  h30       ,h31      ,h32      ,h33+alpha;
 
   W = transformation;
 
@@ -159,7 +196,7 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
           debug.at<float>(row2i,col2i) = source.at<float>(row,col);
 
           // Calculate image difference D = I(W(x,p))-T(x).
-          float D = I2 - target.at<float>(row, col);
+          float D =  source.at<float>(row, col) -I2;
 
           // Update mean error value.
           mean_error += fabsf(D);
@@ -185,10 +222,10 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
         } 
       }
     }
-    // std::cout<< "residual:" << mean_error/pixel_count << std::endl; 
+    std::cout<< "residual:" << mean_error/pixel_count << "\n"; 
 
-    cv::imshow("Initial Alignment", debug);
-    cv::waitKey(2);
+    cv::imshow("Debug", debug);
+    cv::waitKey(24);
     
     b = Eigen::Vector4f(b0,b1,b2,b3);
 
@@ -207,7 +244,7 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
          R(1,0),            R(1,1)+delta_p(3),  delta_p(1),
             0.0,                          0.0,          1;
  
-    dW = T.inverse()*W;
+    dW = T*W;
     W = dW;
 
     // Check termination critera.
@@ -215,8 +252,6 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
       {      
         transformation = W;
         std::cout << "Terminated in " << iter << " iterations." <<std::endl;
-        cv::imshow("Final Alignment", debug);
-        cv::waitKey(500);
         return;
       }
   } // iteration
@@ -227,54 +262,97 @@ void Align(cv::Mat &source, cv::Mat &target, int max_iterations, Eigen::Matrix3f
 
 int main(int argc, char **argv)
 {
+  //Reading images
   cv::Mat img_src_c = cv::imread(argv[1], CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR ); // Read the file
-  cv::Mat img_src_f; img_src_c.convertTo(img_src_f, CV_32F);
   cv::Mat img_trg_c = cv::imread(argv[2], CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR ); // Read the OHTER file
+  
+  float x_offset = 0;
+  float y_offset = 0;
+  if(argc == 5)
+  {
+    x_offset = atof(argv[3]);
+    y_offset = atof(argv[4]);
+  }
+
+
+  //convert images to float representation
+  cv::Mat img_src_f; img_src_c.convertTo(img_src_f, CV_32F);
   cv::Mat img_trg_f; img_trg_c.convertTo(img_trg_f, CV_32F);
 
+  //rescale to unit
   img_src_f/=255;
   img_trg_f/=255;
 
+  //containers for low-pass filtered imates
   cv::Mat img_src_blur;
   cv::Mat img_trg_blur;
+
+
+  //Create a scale-space pyramid by low-pass filtering and downsampling all the way to quarter-size images
 
   float sigma = 0.95; //computed from filter size n=3 in [sigma = 0.3(n/2 - 1) + 0.8]
   cv::GaussianBlur(img_src_f, img_src_blur, cv::Size(3,3), sigma);
   cv::GaussianBlur(img_trg_f, img_trg_blur, cv::Size(3,3), sigma);
-  
   cv::Mat img_src_half;
   cv::Mat img_trg_half;
   cv::resize(img_src_blur, img_src_half, cv::Size(0,0), 0.5, 0.5);
   cv::resize(img_trg_blur, img_trg_half, cv::Size(0,0), 0.5, 0.5);
-  
+
   cv::GaussianBlur(img_src_half, img_src_blur, cv::Size(3,3), sigma);
   cv::GaussianBlur(img_trg_half, img_trg_blur, cv::Size(3,3), sigma);
-  
   cv::Mat img_src_quarter;
   cv::Mat img_trg_quarter;
   cv::resize(img_src_blur, img_src_quarter, cv::Size(0,0), 0.5, 0.5);
   cv::resize(img_trg_blur, img_trg_quarter, cv::Size(0,0), 0.5, 0.5);
   
+  cv::GaussianBlur(img_src_quarter, img_src_blur, cv::Size(3,3), sigma);
+  cv::GaussianBlur(img_trg_quarter, img_trg_blur, cv::Size(3,3), sigma);
+  cv::Mat img_src_eigth;
+  cv::Mat img_trg_eigth;
+  cv::resize(img_src_blur, img_src_eigth, cv::Size(0,0), 0.5, 0.5);
+  cv::resize(img_trg_blur, img_trg_eigth, cv::Size(0,0), 0.5, 0.5);
 
+
+  //offset 
   Eigen::Matrix3f initial_guess;
 
   initial_guess <<
-  1.4, -0.0,  210/4,
-  0.0,  1.4,  110/4,
-  0,      0,    1;
-
-  Align(img_src_quarter, img_trg_quarter, 300, initial_guess);
-
+   1.0,  0.0,  x_offset/8,
+   0.0,  1.0,  y_offset/8,
+   0,      0,    1;
   std::cout << "W:" << std::endl;
   std::cout << initial_guess << std::endl;
 
-  initial_guess(0,2) *= 2;
-  initial_guess(1,2) *= 2;
-  Align(img_src_half, img_trg_half, 200, initial_guess);
-  initial_guess(0,2) *= 2;
-  initial_guess(1,2) *= 2;
-  Align(img_src_f, img_trg_f, 100, initial_guess);
 
+  Align(img_src_eigth, img_trg_eigth, 160, initial_guess);
+  
+  #if PAUSE_BETWEEN
+    cv::waitKey();
+  #endif
+
+  initial_guess(0,2) *= 2;
+  initial_guess(1,2) *= 2;
+  Align(img_src_quarter, img_trg_quarter, 80, initial_guess);
+  
+  #if PAUSE_BETWEEN
+    cv::waitKey();
+  #endif
+
+  initial_guess(0,2) *= 2;
+  initial_guess(1,2) *= 2;
+  Align(img_src_half, img_trg_half, 40, initial_guess);
+  
+  #if PAUSE_BETWEEN
+    cv::waitKey();
+  #endif
+
+  initial_guess(0,2) *= 2;
+  initial_guess(1,2) *= 2;
+  Align(img_src_f, img_trg_f, 20, initial_guess);
+  
+  cv::waitKey();
+  std::cout << initial_guess << std::endl;
+  
 
 
   return 0;
