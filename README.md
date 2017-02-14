@@ -32,7 +32,7 @@ Running the program:
 
 from the main directory:
 
-./bin/align lena_src.png lena.png
+./bin/align lena_src.png lena.png 150 50
 ./bin/align cameraman_src.png cameraman.png
 ./bin/align cat_src.png cat.png 160 160
 
