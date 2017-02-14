@@ -1,6 +1,3 @@
-##(c) Daniel Ricão Canelhas
-##BSD licensed, see src/align.cpp for details.
-
 #READ ME#
 
 
@@ -15,30 +12,43 @@ But why is it called sim2-alignment?
 Because it estimates the parameters for translation, 
 rotation and scale, i.e. a similarity transform in 2D
 
-
-
-
 Dependencies:
 
 This program depends on Eigen3, OpenCV and cmake (and optionally OpenMP).
-
 Compilation instructions:
-
+```sh
 $ mkdir build && cd build
 $ cmake ..
 $ make
-
+```
 Running the program:
 
 from the main directory:
 
+<<<<<<< HEAD
 ./bin/align lena_src.png lena.png 150 50
+=======
+```sh
+./bin/align lena_src.png lena.png
+>>>>>>> 4a1c7a3ea7b255cc47bfc4552de25e0a59c5c7c5
 ./bin/align cameraman_src.png cameraman.png
 ./bin/align cat_src.png cat.png 160 160
+```
 
 The third image is more challenging, but given this initialization (offset in rows and columns respectively) it converges.
 
+<<<<<<< HEAD
 References:
 [1]Baker, Simon, and Iain Matthews. "Lucas-kanade 20 years on: A unifying framework." International journal of computer vision 56.3 (2004): 221-255.
 [2]Lucas, Bruce D., and Takeo Kanade. "An iterative image registration technique with an application to stereo vision." IJCAI. Vol. 81. No. 1. 1981.
 [3]Huber, Peter J. "Robust estimation of a location parameter." The Annals of Mathematical Statistics 35.1 (1964): 73-101.
+=======
+##References:
+ - [1] Baker, Simon, and Iain Matthews. "Lucas-kanade 20 years on: A unifying framework." International journal of computer vision 56.3 (2004): 221-255.
+
+ - [2] Lucas, Bruce D., and Takeo Kanade. "An iterative image registration technique with an application to stereo vision." IJCAI. Vol. 81. No. 1. 1981.
+
+ - [3] Huber, Peter J. "Robust estimation of a location parameter." The Annals of Mathematical Statistics 35.1 (1964): 73-101.
+ 
+ ##(c) Daniel Ricão Canelhas
+>>>>>>> 4a1c7a3ea7b255cc47bfc4552de25e0a59c5c7c5
